@@ -1,0 +1,12 @@
+[package]
+name = "terraffi_testlib"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+terraffi_macro = { path = "../terraffi_macro" }
+terraffi_ctypes = { path = "../terraffi_ctypes" }
+
+[build-dependencies]
+terraffi_gen = { path = "../terraffi_gen" }

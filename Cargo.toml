@@ -1,0 +1,21 @@
+[workspace]
+resolver = "3"
+members = [
+    "terraffi_gen",
+    "terraffi_ctypes",
+    "terraffi_macro",
+    "terraffi_testlib"
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94.0"
+authors = ["pixsperdavid <david@pixsper.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/pixsper/terraffi"
+repository = "https://github.com/pixsper/terraffi"
+documentation = "https://docs.rs/terraffi"
+keywords = ["ffi", "c", "interop", "bindings"]
+categories = ["development-tools::ffi"]

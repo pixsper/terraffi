@@ -1,0 +1,26 @@
+[package]
+name = "terraffi_ctypes"
+description = "Crate providing a number of types specialized for C interop via terraffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+serde = { version = "1.0", optional = true, features = ["derive"] }
+
+[features]
+default = ["std", "alloc"]
+std = ["serde/std"]
+alloc = ["serde/alloc"]
+
+[lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+alloc_instead_of_core = "warn"
