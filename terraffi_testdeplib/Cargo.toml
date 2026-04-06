@@ -1,0 +1,10 @@
+[package]
+name = "terraffi_testdeplib"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+bitflags = "2.11"
+terraffi_macro = { path = "../terraffi_macro" }
+terraffi_ctypes = { path = "../terraffi_ctypes" }

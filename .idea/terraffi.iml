@@ -7,6 +7,8 @@
       <sourceFolder url="file://$MODULE_DIR$/terraffi_gen/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/terraffi_gen/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/terraffi_testlib/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/terraffi_testdeplib/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/terraffi_helpers/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

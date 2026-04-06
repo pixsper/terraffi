@@ -3,8 +3,10 @@ resolver = "3"
 members = [
     "terraffi_gen",
     "terraffi_ctypes",
+    "terraffi_helpers",
     "terraffi_macro",
-    "terraffi_testlib"
+    "terraffi_testlib",
+    "terraffi_testdeplib"
 ]
 
 [workspace.package]

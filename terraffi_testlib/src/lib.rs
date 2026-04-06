@@ -1,2 +1,4 @@
-mod point;
-pub use point::*;
+#![allow(unused)]
+
+mod example_structure;
+pub use example_structure::*;

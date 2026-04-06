@@ -321,6 +321,609 @@ impl<'de> Deserialize<'de> for CStringPtr {
     }
 }
 
+/// A borrowed null-terminated C-compatible UTF8 string, for use in FFI interop. This is guaranteed to be the size of a pointer.
+/// Unlike [`CStringPtr`], this does not own the string data and will not free it on drop.
+/// Similar to `CStringPtr` the interior pointer can never be null, so when used as part of FFI interop it should be used as
+/// `Option<CStringPtrRef>` when non-null values cannot be guaranteed. `Option<CStringPtrRef>` is also guaranteed to be the size of a pointer.
+#[repr(transparent)]
+pub struct CStringPtrRef<'a> {
+    ptr: NonNull<c_char>,
+    _marker: PhantomData<&'a CStr>,
+}
+
+unsafe impl Send for CStringPtrRef<'_> {}
+unsafe impl Sync for CStringPtrRef<'_> {}
+
+impl<'a> CStringPtrRef<'a> {
+    /// Creates a `CStringPtrRef` from a raw non-null pointer.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must point to a valid, null-terminated C string that remains valid
+    /// for the lifetime `'a`.
+    pub unsafe fn from_ptr(ptr: NonNull<c_char>) -> Self {
+        Self {
+            ptr,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Returns the contents of this `CStringPtrRef` as a byte slice, without the trailing
+    /// null byte.
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { CStr::from_ptr(self.ptr.as_ref()).to_bytes() }
+    }
+
+    /// Returns the contents of this `CStringPtrRef` as a byte slice, **including** the
+    /// trailing null byte.
+    pub fn as_bytes_with_nul(&self) -> &[u8] {
+        unsafe { CStr::from_ptr(self.ptr.as_ref()).to_bytes_with_nul() }
+    }
+
+    /// Borrows the contents of this `CStringPtrRef` as a [`CStr`].
+    pub fn as_c_str(&self) -> &CStr {
+        unsafe { CStr::from_ptr(self.ptr.as_ref()) }
+    }
+}
+
+impl Copy for CStringPtrRef<'_> {}
+
+impl Clone for CStringPtrRef<'_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl AsRef<CStr> for CStringPtrRef<'_> {
+    fn as_ref(&self) -> &CStr {
+        self.as_c_str()
+    }
+}
+
+impl Borrow<CStr> for CStringPtrRef<'_> {
+    fn borrow(&self) -> &CStr {
+        self.as_c_str()
+    }
+}
+
+impl Deref for CStringPtrRef<'_> {
+    type Target = CStr;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_c_str()
+    }
+}
+
+impl Debug for CStringPtrRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl Display for CStringPtrRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", unsafe {
+            CStr::from_ptr(self.ptr.as_ref()).to_string_lossy()
+        })
+    }
+}
+
+impl PartialEq<Self> for CStringPtrRef<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_c_str() == other.as_c_str()
+    }
+}
+
+impl Eq for CStringPtrRef<'_> {}
+
+impl Hash for CStringPtrRef<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_c_str().hash(state);
+    }
+}
+
+impl PartialOrd for CStringPtrRef<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CStringPtrRef<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_c_str().cmp(other.as_c_str())
+    }
+}
+
+impl<'a> From<&'a CStringPtr> for CStringPtrRef<'a> {
+    fn from(value: &'a CStringPtr) -> Self {
+        Self {
+            ptr: value.0,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'a> From<&'a CStr> for CStringPtrRef<'a> {
+    fn from(value: &'a CStr) -> Self {
+        Self {
+            ptr: unsafe { NonNull::new_unchecked(value.as_ptr() as *mut c_char) },
+            _marker: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'a> From<&'a CString> for CStringPtrRef<'a> {
+    fn from(value: &'a CString) -> Self {
+        Self {
+            ptr: unsafe { NonNull::new_unchecked(value.as_ptr() as *mut c_char) },
+            _marker: PhantomData,
+        }
+    }
+}
+
+/// An owned null-terminated mutable C-compatible UTF8 string, for use in FFI interop. This is guaranteed to be the size of a pointer.
+/// Similar to [`CStringPtr`] but wraps a mutable pointer. The interior pointer can never be null,
+/// so when used as part of FFI interop it should be used as `Option<CStringPtrMut>` when non-null
+/// values cannot be guaranteed. `Option<CStringPtrMut>` is also guaranteed to be the size of a pointer.
+#[repr(transparent)]
+pub struct CStringPtrMut(NonNull<c_char>);
+
+unsafe impl Send for CStringPtrMut {}
+unsafe impl Sync for CStringPtrMut {}
+
+impl CStringPtrMut {
+    /// Creates a new C-compatible string from a container of bytes.
+    ///
+    /// This function will consume the provided data and use the underlying bytes to
+    /// construct a new string, ensuring that there is a trailing 0 byte. This trailing
+    /// 0 byte will be appended by this function; the provided data should *not*
+    /// contain any 0 bytes in it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes contain an interior null byte (`\0`).
+    #[cfg(feature = "alloc")]
+    pub fn new<T: Into<Vec<u8>>>(t: T) -> Result<Self, NulError> {
+        match CString::new(t) {
+            Ok(s) => Ok(Self(unsafe { NonNull::new_unchecked(s.into_raw()) })),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Creates a `CStringPtrMut` from a byte vector without checking for interior null bytes.
+    ///
+    /// A trailing null byte will be appended if not already present.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that the byte vector does not contain any interior
+    /// null bytes. Providing a vector with interior nulls produces undefined behavior
+    /// when the string is later passed to C code.
+    #[cfg(feature = "alloc")]
+    pub unsafe fn from_vec_unchecked(v: Vec<u8>) -> Self {
+        unsafe {
+            Self(NonNull::new_unchecked(
+                CString::from_vec_unchecked(v).into_raw(),
+            ))
+        }
+    }
+
+    /// Converts the `CStringPtrMut` into a [`String`] if the contents are valid UTF-8.
+    ///
+    /// This method consumes `self` and transfers ownership of the string to the returned
+    /// [`String`]. The trailing null byte is not included in the returned string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the string contains bytes that are not valid UTF-8.
+    #[cfg(feature = "alloc")]
+    pub fn into_string(self) -> Result<String, IntoStringError> {
+        let ptr = self.0.as_ptr();
+        core::mem::forget(self);
+        unsafe { CString::from_raw(ptr).into_string() }
+    }
+
+    /// Converts the `CStringPtrMut` into a byte vector, excluding the trailing null byte.
+    ///
+    /// This method consumes `self`.
+    #[cfg(feature = "alloc")]
+    pub fn into_bytes(self) -> Vec<u8> {
+        let ptr = self.0.as_ptr();
+        core::mem::forget(self);
+        unsafe { CString::from_raw(ptr).into_bytes() }
+    }
+
+    /// Converts the `CStringPtrMut` into a byte vector, including the trailing null byte.
+    ///
+    /// This method consumes `self`.
+    #[cfg(feature = "alloc")]
+    pub fn into_bytes_with_nul(self) -> Vec<u8> {
+        let ptr = self.0.as_ptr();
+        core::mem::forget(self);
+        unsafe { CString::from_raw(ptr).into_bytes_with_nul() }
+    }
+
+    /// Returns the contents of this `CStringPtrMut` as a byte slice, without the trailing
+    /// null byte.
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { CStr::from_ptr(self.0.as_ref()).to_bytes() }
+    }
+
+    /// Returns the contents of this `CStringPtrMut` as a byte slice, **including** the
+    /// trailing null byte.
+    pub fn as_bytes_with_nul(&self) -> &[u8] {
+        unsafe { CStr::from_ptr(self.0.as_ref()).to_bytes_with_nul() }
+    }
+
+    /// Borrows the contents of this `CStringPtrMut` as a [`CStr`].
+    pub fn as_c_str(&self) -> &CStr {
+        unsafe { CStr::from_ptr(self.0.as_ref()) }
+    }
+
+    /// Returns the raw mutable pointer.
+    ///
+    /// The caller must ensure that the string outlives the pointer this function returns,
+    /// or else it will end up dangling.
+    pub fn as_mut_ptr(&mut self) -> *mut c_char {
+        self.0.as_ptr()
+    }
+
+    /// Converts this `CStringPtrMut` into a boxed [`CStr`], consuming `self`.
+    #[cfg(feature = "alloc")]
+    pub fn into_boxed_c_str(self) -> Box<CStr> {
+        let ptr = self.0.as_ptr();
+        core::mem::forget(self);
+        unsafe { CString::from_raw(ptr).into_boxed_c_str() }
+    }
+
+    /// Creates a `CStringPtrMut` from a byte vector that already ends with a null byte,
+    /// without checking that the null byte is the only one.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that:
+    /// - The last byte of `v` is `\0`.
+    /// - There are no other `\0` bytes in `v`.
+    #[cfg(feature = "alloc")]
+    pub unsafe fn from_vec_with_nul_unchecked(v: Vec<u8>) -> Self {
+        unsafe {
+            Self(NonNull::new_unchecked(
+                CString::from_vec_with_nul_unchecked(v).into_raw(),
+            ))
+        }
+    }
+
+    /// Creates a `CStringPtrMut` from a byte vector that already ends with a null byte.
+    ///
+    /// Unlike [`CStringPtrMut::new`], the provided vector must already contain a trailing
+    /// null byte; one will not be appended automatically.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the vector does not end with `\0`, or if there is more than
+    /// one null byte (i.e. an interior null is present).
+    #[cfg(feature = "alloc")]
+    pub fn from_vec_with_null(v: Vec<u8>) -> Result<Self, FromVecWithNulError> {
+        match CString::from_vec_with_nul(v) {
+            Ok(s) => Ok(Self(unsafe { NonNull::new_unchecked(s.into_raw()) })),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl Drop for CStringPtrMut {
+    fn drop(&mut self) {
+        let _ = unsafe { CString::from_raw(self.0.as_ptr()) };
+    }
+}
+
+impl AsRef<CStr> for CStringPtrMut {
+    fn as_ref(&self) -> &CStr {
+        self.as_c_str()
+    }
+}
+
+impl Borrow<CStr> for CStringPtrMut {
+    fn borrow(&self) -> &CStr {
+        self.as_c_str()
+    }
+}
+
+impl Deref for CStringPtrMut {
+    type Target = CStr;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_c_str()
+    }
+}
+
+impl Debug for CStringPtrMut {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl Display for CStringPtrMut {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", unsafe {
+            CStr::from_ptr(self.0.as_ref()).to_string_lossy()
+        })
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl Clone for CStringPtrMut {
+    fn clone(&self) -> Self {
+        unsafe { Self::new(CStr::from_ptr(self.0.as_ref()).to_bytes()).unwrap() }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl Default for CStringPtrMut {
+    fn default() -> Self {
+        Self(unsafe { NonNull::new_unchecked(CString::default().into_raw()) })
+    }
+}
+
+impl PartialEq<Self> for CStringPtrMut {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_c_str() == other.as_c_str()
+    }
+}
+
+impl Eq for CStringPtrMut {}
+
+impl Hash for CStringPtrMut {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_c_str().hash(state);
+    }
+}
+
+impl PartialOrd for CStringPtrMut {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CStringPtrMut {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_c_str().cmp(other.as_c_str())
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl From<&CStr> for CStringPtrMut {
+    fn from(value: &CStr) -> Self {
+        unsafe {
+            Self(NonNull::new_unchecked(
+                CString::from_vec_unchecked(value.to_bytes().to_vec()).into_raw(),
+            ))
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl From<CString> for CStringPtrMut {
+    fn from(value: CString) -> Self {
+        Self(unsafe { NonNull::new_unchecked(value.into_raw()) })
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl From<&CString> for CStringPtrMut {
+    fn from(value: &CString) -> Self {
+        Self(unsafe { NonNull::new_unchecked(value.clone().into_raw()) })
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl From<CStringPtrMut> for CString {
+    fn from(value: CStringPtrMut) -> Self {
+        let ptr = value.0.as_ptr();
+        core::mem::forget(value);
+        unsafe { CString::from_raw(ptr) }
+    }
+}
+
+impl<'a> From<&'a CStringPtrMut> for CStringPtrRef<'a> {
+    fn from(value: &'a CStringPtrMut) -> Self {
+        Self {
+            ptr: value.0,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'a> From<&'a CStringPtrMut> for CStringPtrMutRef<'a> {
+    fn from(value: &'a CStringPtrMut) -> Self {
+        Self {
+            ptr: value.0,
+            _marker: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for CStringPtrMut {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_c_str().to_string_lossy().as_ref())
+    }
+}
+
+#[cfg(feature = "serde")]
+#[cfg(feature = "alloc")]
+impl<'de> Deserialize<'de> for CStringPtrMut {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct CStringPtrMutVisitor;
+
+        impl<'de> Visitor<'de> for CStringPtrMutVisitor {
+            type Value = CStringPtrMut;
+
+            fn expecting(&self, f: &mut Formatter) -> fmt::Result {
+                f.write_str("a UTF-8 string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(CString::new(v).map_err(E::custom)?.into())
+            }
+        }
+
+        deserializer.deserialize_str(CStringPtrMutVisitor)
+    }
+}
+
+/// A borrowed null-terminated mutable C-compatible UTF8 string, for use in FFI interop. This is guaranteed to be the size of a pointer.
+/// Unlike [`CStringPtrMut`], this does not own the string data and will not free it on drop.
+/// Similar to `CStringPtrMut` the interior pointer can never be null, so when used as part of FFI interop it should be used as
+/// `Option<CStringPtrMutRef>` when non-null values cannot be guaranteed. `Option<CStringPtrMutRef>` is also guaranteed to be the size of a pointer.
+#[repr(transparent)]
+pub struct CStringPtrMutRef<'a> {
+    ptr: NonNull<c_char>,
+    _marker: PhantomData<&'a mut CStr>,
+}
+
+unsafe impl Send for CStringPtrMutRef<'_> {}
+unsafe impl Sync for CStringPtrMutRef<'_> {}
+
+impl<'a> CStringPtrMutRef<'a> {
+    /// Creates a `CStringPtrMutRef` from a raw non-null pointer.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must point to a valid, null-terminated C string that remains valid
+    /// and exclusively accessible for the lifetime `'a`.
+    pub unsafe fn from_ptr(ptr: NonNull<c_char>) -> Self {
+        Self {
+            ptr,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Returns the contents of this `CStringPtrMutRef` as a byte slice, without the trailing
+    /// null byte.
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { CStr::from_ptr(self.ptr.as_ref()).to_bytes() }
+    }
+
+    /// Returns the contents of this `CStringPtrMutRef` as a byte slice, **including** the
+    /// trailing null byte.
+    pub fn as_bytes_with_nul(&self) -> &[u8] {
+        unsafe { CStr::from_ptr(self.ptr.as_ref()).to_bytes_with_nul() }
+    }
+
+    /// Borrows the contents of this `CStringPtrMutRef` as a [`CStr`].
+    pub fn as_c_str(&self) -> &CStr {
+        unsafe { CStr::from_ptr(self.ptr.as_ref()) }
+    }
+
+    /// Returns the raw mutable pointer.
+    ///
+    /// The caller must ensure that the string outlives the pointer this function returns,
+    /// or else it will end up dangling.
+    pub fn as_mut_ptr(&mut self) -> *mut c_char {
+        self.ptr.as_ptr()
+    }
+}
+
+impl AsRef<CStr> for CStringPtrMutRef<'_> {
+    fn as_ref(&self) -> &CStr {
+        self.as_c_str()
+    }
+}
+
+impl Borrow<CStr> for CStringPtrMutRef<'_> {
+    fn borrow(&self) -> &CStr {
+        self.as_c_str()
+    }
+}
+
+impl Deref for CStringPtrMutRef<'_> {
+    type Target = CStr;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_c_str()
+    }
+}
+
+impl Debug for CStringPtrMutRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl Display for CStringPtrMutRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", unsafe {
+            CStr::from_ptr(self.ptr.as_ref()).to_string_lossy()
+        })
+    }
+}
+
+impl PartialEq<Self> for CStringPtrMutRef<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_c_str() == other.as_c_str()
+    }
+}
+
+impl Eq for CStringPtrMutRef<'_> {}
+
+impl Hash for CStringPtrMutRef<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_c_str().hash(state);
+    }
+}
+
+impl PartialOrd for CStringPtrMutRef<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CStringPtrMutRef<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_c_str().cmp(other.as_c_str())
+    }
+}
+
+impl<'a> From<CStringPtrMutRef<'a>> for CStringPtrRef<'a> {
+    fn from(value: CStringPtrMutRef<'a>) -> Self {
+        Self {
+            ptr: value.ptr,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'a> From<&'a CStr> for CStringPtrMutRef<'a> {
+    fn from(value: &'a CStr) -> Self {
+        Self {
+            ptr: unsafe { NonNull::new_unchecked(value.as_ptr() as *mut c_char) },
+            _marker: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'a> From<&'a CString> for CStringPtrMutRef<'a> {
+    fn from(value: &'a CString) -> Self {
+        Self {
+            ptr: unsafe { NonNull::new_unchecked(value.as_ptr() as *mut c_char) },
+            _marker: PhantomData,
+        }
+    }
+}
+
 #[cfg(test)]
 #[cfg(feature = "alloc")]
 mod tests {
@@ -723,9 +1326,9 @@ impl CStringBuffer {
     /// Returns the raw bytes of the buffer as a slice, **including** the trailing null
     /// byte, or `None` if the buffer is absent.
     pub fn as_bytes(&self) -> Option<&[u8]> {
-        match self.len {
-            0 => None,
-            _ => Some(unsafe { slice::from_raw_parts(self.ptr as *const u8, self.len) }),
+        match self.ptr.is_null() || self.len == 0 {
+            true => None,
+            false => Some(unsafe { slice::from_raw_parts(self.ptr as *const u8, self.len) }),
         }
     }
 

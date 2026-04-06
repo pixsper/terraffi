@@ -22,5 +22,7 @@ jobs:
         run: cargo fmt -- --check
       - name: Build
         run: cargo build
+      - name: Test
+        run: cargo test
       - name: Run clippy and fail if any warnings
         run: cargo clippy -- -D warnings
