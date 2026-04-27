@@ -1,8 +1,8 @@
 use core::fmt::{Debug, Formatter};
+use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 use core::{fmt, slice};
-
 #[cfg(feature = "alloc")]
 use {alloc::boxed::Box, alloc::vec::Vec};
 
@@ -283,6 +283,12 @@ impl<T: Debug> Debug for CVec<T> {
     }
 }
 
+impl<T: Hash> Hash for CVec<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state)
+    }
+}
+
 #[cfg(feature = "alloc")]
 impl<T> From<Box<[T]>> for CVec<T> {
     fn from(value: Box<[T]>) -> Self {
@@ -454,6 +460,12 @@ impl<T: Debug> Debug for CVecRef<'_, T> {
     }
 }
 
+impl<T: Hash> Hash for CVecRef<'_, T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state)
+    }
+}
+
 /// A referenced C-compatible resizable mutable array, for use in FFI interop.
 /// Array data will NOT be freed when dropped.
 #[repr(C)]
@@ -567,6 +579,12 @@ impl<T: Eq> Eq for CVecMutRef<'_, T> {}
 impl<T: Debug> Debug for CVecMutRef<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+impl<T: Hash> Hash for CVecMutRef<'_, T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state)
     }
 }
 
