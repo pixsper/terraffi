@@ -1450,6 +1450,12 @@ impl Debug for CStringBuffer {
     }
 }
 
+impl Display for CStringBuffer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.as_option().fmt(f)
+    }
+}
+
 impl PartialEq for CStringBuffer {
     fn eq(&self, other: &Self) -> bool {
         self.as_str() == other.as_str()
