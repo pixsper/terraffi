@@ -46,7 +46,18 @@ typedef struct ExampleStructureT {
     ExampleDependencyStructT struct_member;
     /** A slice member */
     uint8_t slice_member[16];
+    /** A box ptr member */
+    int32_t* box_ptr_member;
+    /** A option box member */
+    int32_t* option_box_member;
 } ExampleStructureT;
+
+typedef struct ExampleRefStructureT {
+    const ExampleStructureT* option_ref;
+    const ExampleStructureT* ref_ptr;
+    ExampleStructureT* mut_option_ref;
+    ExampleStructureT* mut_ref_ptr;
+} ExampleRefStructureT;
 
 /** A C-compatible enum with explicitly assigned discriminant values, including gaps in the numbering. */
 typedef enum ExampleEnumWithValuesE {

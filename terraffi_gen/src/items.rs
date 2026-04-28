@@ -204,6 +204,37 @@ fn first_type_arg(
     })
 }
 
+/// If `ty` is `Box<T>` (or `alloc::boxed::Box<T>` / `std::boxed::Box<T>`), returns
+/// the converted `CType` for `T`. Otherwise returns `Ok(None)`.
+fn box_inner_type(ty: &Type) -> Result<Option<CType>, String> {
+    let Type::Path(type_path) = ty else {
+        return Ok(None);
+    };
+    let segments: Vec<_> = type_path
+        .path
+        .segments
+        .iter()
+        .map(|s| s.ident.to_string())
+        .collect();
+    let is_box = match segments.as_slice() {
+        [only] => only == "Box",
+        [a, b] if b == "Box" => a == "std" || a == "alloc",
+        [a, b, c] if c == "Box" => (a == "std" || a == "alloc") && b == "boxed",
+        _ => false,
+    };
+    if !is_box {
+        return Ok(None);
+    }
+    let last = type_path.path.segments.last().unwrap();
+    let syn::PathArguments::AngleBracketed(args) = &last.arguments else {
+        return Ok(None);
+    };
+    let Some(inner_ty) = first_type_arg(&args.args) else {
+        return Ok(None);
+    };
+    Ok(Some(inner_ty.try_into()?))
+}
+
 impl TryFrom<&Type> for CType {
     type Error = String;
 
@@ -247,12 +278,12 @@ impl TryFrom<&Type> for CType {
                     let ident = segment.ident.to_string();
 
                     // Handle Option<&T>, Option<&mut T> as nullable pointers,
-                    // and Option<CStringPtr> as char*
+                    // Option<Box<T>> as `const T*`, and Option<CStringPtr> as char*
                     if is_std_option(&type_path.path)
                         && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
                         && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
                     {
-                        if let syn::Type::Reference(reference) = inner_ty {
+                        if let Type::Reference(reference) = inner_ty {
                             let is_const = reference.mutability.is_none();
                             let inner = reference.elem.as_ref().try_into()?;
                             return Ok(CType::Pointer {
@@ -261,8 +292,40 @@ impl TryFrom<&Type> for CType {
                                 inner: Box::new(inner),
                             });
                         }
+                        if let Some(inner) = box_inner_type(inner_ty)? {
+                            return Ok(CType::Pointer {
+                                is_const: false,
+                                inner: Box::new(inner),
+                            });
+                        }
                         // Option<CStringPtr> has the same layout as CStringPtr
                         return inner_ty.try_into();
+                    }
+
+                    // BoxPtr<T> is an alias for Option<Box<T>>; export as `T*`.
+                    if ident == "BoxPtr"
+                        && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(inner_ty) = first_type_arg(&args.args)
+                    {
+                        let inner = inner_ty.try_into()?;
+                        return Ok(CType::Pointer {
+                            is_const: false,
+                            inner: Box::new(inner),
+                        });
+                    }
+
+                    // RefPtr<'a, T> is an alias for Option<&'a T>; export as `const T*`.
+                    // MutRefPtr<'a, T> is an alias for Option<&'a mut T>; export as `T*`.
+                    if matches!(ident.as_str(), "RefPtr" | "MutRefPtr")
+                        && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(inner_ty) = first_type_arg(&args.args)
+                    {
+                        let is_const = ident == "RefPtr";
+                        let inner = inner_ty.try_into()?;
+                        return Ok(CType::Pointer {
+                            is_const,
+                            inner: Box::new(inner),
+                        });
                     }
 
                     if ident == "CHandle"

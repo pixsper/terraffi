@@ -9,6 +9,8 @@ pub type RefPtr<'a, T> = Option<&'a T>;
 
 pub type MutRefPtr<'a, T> = Option<&'a mut T>;
 
+pub type BoxPtr<T> = Option<Box<T>>;
+
 /// A FFI-safe handle to a heap-allocated `T`.
 ///
 /// Exports as `T* const*` in C headers. The outer pointer indicates whether the

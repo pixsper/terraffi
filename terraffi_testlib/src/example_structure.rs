@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use serde::Deserialize;
 use serde::Serialize;
-use terraffi_ctypes::{CSlice, CStringPtr};
+use terraffi_ctypes::{BoxPtr, CSlice, CStringPtr, MutRefPtr, RefPtr};
 use terraffi_macro::{DiscriminantEnum, terraffi, terraffi_export};
 use terraffi_testdeplib::ExampleDependencyStruct;
 
@@ -30,6 +30,19 @@ pub struct ExampleStructure {
     pub struct_member: ExampleDependencyStruct,
     /// A slice member
     pub slice_member: [u8; 16],
+    /// A box ptr member
+    pub box_ptr_member: BoxPtr<i32>,
+    /// A option box member
+    pub option_box_member: Option<Box<i32>>,
+}
+
+#[terraffi_export]
+#[repr(C)]
+pub struct ExampleRefStructure<'a> {
+    pub option_ref: Option<&'a ExampleStructure>,
+    pub ref_ptr: RefPtr<'a, ExampleStructure>,
+    pub mut_option_ref: Option<&'a mut ExampleStructure>,
+    pub mut_ref_ptr: MutRefPtr<'a, ExampleStructure>,
 }
 
 #[terraffi_export]
