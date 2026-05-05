@@ -740,6 +740,7 @@ impl TerraffiGenerator {
 
         if self.config.is_add_std_includes {
             w.write_str("#include <stdint.h>\n")?;
+            w.write_str("#include <stddef.h>\n")?;
             w.write_str("#include <stdbool.h>\n")?;
         }
         for include in &self.config.additional_includes {
