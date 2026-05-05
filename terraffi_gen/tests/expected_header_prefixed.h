@@ -2,6 +2,7 @@
 #define TERRAFFI_TESTLIB_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 
 /** A simple struct defined in a dependency crate, used to verify that types from local dependency crates are included
@@ -109,7 +110,7 @@ typedef struct test_example_discriminated_enum_t {
         test_example_enum_e bar;
         test_example_structure_t baz;
         test_union_only_struct_t qux;
-    }
+    };
 } test_example_discriminated_enum_t;
 
 /** A discriminated union with explicit discriminant values and a fixed underlying representation of `u32`. Demonstrates
@@ -121,7 +122,7 @@ typedef struct test_example_discriminated_enum_with_values_t {
         uint32_t foo;
         test_example_enum_e bar;
         test_example_structure_t baz;
-    }
+    };
 } test_example_discriminated_enum_with_values_t;
 
 /** A set of bitflags demonstrating `bitflags!` macro support in terraffi.

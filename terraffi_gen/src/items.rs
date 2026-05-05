@@ -1252,7 +1252,7 @@ impl CDiscriminatedUnion {
                     writeln!(w, "        }} {field_name};")?;
                 }
             }
-            writeln!(w, "    }}")?;
+            writeln!(w, "    }};")?;
         }
         writeln!(w, "}} {type_name};")
     }
