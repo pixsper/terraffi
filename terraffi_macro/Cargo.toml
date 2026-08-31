@@ -1,0 +1,23 @@
+[package]
+name = "terraffi_macro"
+description = "Proc macros for terraffi, for annotating Rust libraries which expose a C interface"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+terraffi_helpers = { path = "../terraffi_helpers", version = "0.1.0" }
+proc-macro-crate = "3.5"

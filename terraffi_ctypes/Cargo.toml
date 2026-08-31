@@ -1,0 +1,30 @@
+[package]
+name = "terraffi_ctypes"
+description = "Crate providing a number of types specialized for C interop via terraffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+serde = { version = "1.0", optional = true, default-features = false }
+
+[features]
+default = ["std", "alloc"]
+# `std` implies `alloc`: the owning types (CVec, CStringBuffer) require an allocator.
+std = ["alloc", "serde?/std"]
+alloc = ["serde?/alloc"]
+# Optional serde support. The `?` above keeps serde out of the graph unless
+# this feature is explicitly enabled.
+serde = ["dep:serde"]
+
+[lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+alloc_instead_of_core = "warn"

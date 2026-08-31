@@ -1,0 +1,17 @@
+[package]
+name = "terraffi_helpers"
+description = "Internal shared helpers for terraffi. Not intended for direct use"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full"] }
+proc-macro2 = "1.0"

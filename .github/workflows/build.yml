@@ -1,0 +1,74 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    # A tag push is a `push` event whose ref is not a branch, so without this it
+    # is filtered out by the `branches` list above and release tags run nothing.
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  # Allows a run to be started by hand, without pushing anything.
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Builds and tests on the minimum supported Rust version, so an accidental use
+  # of a newer API is caught rather than silently raising the MSRV.
+  msrv:
+    name: Build and test (MSRV 1.93.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.93.0
+      - name: Build
+        run: cargo build --workspace --all-targets
+      - name: Test
+        run: cargo test --workspace
+
+  # Lints on stable. Pinning lints to the MSRV hides every lint added since, so
+  # this deliberately tracks the current toolchain.
+  lint:
+    name: rustfmt and clippy (stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Run rustfmt and fail if any warnings
+        run: cargo fmt --all -- --check
+      # --all-targets covers tests, examples and benches, which plain `cargo clippy` skips.
+      - name: Run clippy and fail if any warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Run clippy with all features
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # Miri interprets the raw-pointer code in terraffi_ctypes and catches undefined
+  # behaviour, such as pointer provenance errors, that a native test run cannot.
+  # Only that crate is run: the others are safe code, and terraffi_gen's tests shell
+  # out to `cargo metadata`, which Miri cannot execute.
+  miri:
+    name: Miri (terraffi_ctypes)
+    runs-on: ubuntu-latest
+    env:
+      # `CHandle` deliberately leaks its outer allocation, because the C side may
+      # still hold the handle pointer - see its type documentation. Leak checking is
+      # therefore off; every undefined-behaviour check stays on.
+      MIRIFLAGS: -Zmiri-ignore-leaks
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri, rust-src
+      - name: Prepare the Miri sysroot
+        run: cargo miri setup
+      # Widest surface: std, alloc and the serde implementations.
+      - name: Miri with all features
+        run: cargo miri test -p terraffi_ctypes --all-features
+      # The no_std build exercises different code behind the `alloc` gates.
+      - name: Miri without default features
+        run: cargo miri test -p terraffi_ctypes --no-default-features

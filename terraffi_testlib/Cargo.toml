@@ -1,0 +1,16 @@
+[package]
+name = "terraffi_testlib"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+bitflags = "2.11"
+serde = { version = "1.0", features = ["derive"] }
+terraffi_macro = { path = "../terraffi_macro" }
+terraffi_ctypes = { path = "../terraffi_ctypes" }
+terraffi_testdeplib = { path = "../terraffi_testdeplib" }
+
+
+[build-dependencies]
+terraffi_gen = { path = "../terraffi_gen" }

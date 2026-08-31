@@ -1,0 +1,11 @@
+[package]
+name = "terraffi_testfacade"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Depends on the `terraffi` facade ONLY - deliberately not on terraffi_ctypes or
+# terraffi_macro. This is what proves the macros resolve their paths through the
+# facade, which a test inside the terraffi crate itself cannot verify.
+[dependencies]
+terraffi = { path = "../terraffi" }

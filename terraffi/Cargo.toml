@@ -1,0 +1,31 @@
+[package]
+name = "terraffi"
+description = "Build Rust libraries that expose a public-facing C interface, with human-readable generated headers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+terraffi_ctypes = { path = "../terraffi_ctypes", version = "0.1.0", default-features = false }
+terraffi_macro = { path = "../terraffi_macro", version = "0.1.0", optional = true }
+
+[features]
+default = ["std", "alloc", "macros"]
+# `std` implies `alloc`: the owning types (CVec, CStringBuffer) require an allocator.
+std = ["alloc", "terraffi_ctypes/std"]
+alloc = ["terraffi_ctypes/alloc"]
+# Optional serde implementations for the C interop types.
+serde = ["terraffi_ctypes/serde"]
+# The `#[terraffi_export]` / `#[terraffi_ignore]` attributes and derive macros.
+macros = ["dep:terraffi_macro"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
